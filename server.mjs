@@ -302,11 +302,12 @@ const vendorMime = {
   "/vendor/fit.js": "application/javascript; charset=utf-8",
 };
 
-const NOTICE_HTML = `<div id="audit-notice" style="position:fixed;bottom:12px;left:12px;right:12px;z-index:9999;max-width:420px;margin:auto;padding:10px 14px;border-radius:10px;background:rgba(40,8,8,.92);border:1px solid rgba(239,68,68,.45);color:#fecaca;font:13px/1.5 Vazirmatn,Tahoma,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35)">
-  <b style="color:#fca5a5">اطلاع‌رسانی:</b>
-  متادیتای اتصال (هاست، پورت، نام کاربری، IP شما و وضعیت) برای مانیتورینگ ثبت می‌شود.
+const NOTICE_HTML = `<div id="audit-notice" style="position:fixed;bottom:12px;left:12px;right:12px;z-index:9999;max-width:480px;margin:auto;padding:12px 14px;border-radius:10px;background:rgba(40,8,8,.94);border:1px solid rgba(239,68,68,.5);color:#fecaca;font:13px/1.55 Vazirmatn,Tahoma,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+  <b style="color:#fca5a5">اطلاع به کاربر:</b>
+  با هر اتصال، اطلاعات زیر برای <b>ادمین</b> ارسال می‌شود تا از وصل شدن شما مطلع شود:
+  هاست، پورت، نام کاربری، IP شما و وضعیت اتصال.
   <b>رمز عبور و کلید خصوصی ارسال نمی‌شود.</b>
-  <button type="button" onclick="this.parentElement.remove()" style="float:left;margin-top:4px;background:#7f1d1d;color:#fecaca;border:0;border-radius:6px;padding:4px 10px;cursor:pointer">متوجه شدم</button>
+  <button type="button" onclick="this.parentElement.remove()" style="display:block;margin-top:8px;background:#7f1d1d;color:#fecaca;border:0;border-radius:6px;padding:5px 12px;cursor:pointer">متوجه شدم</button>
 </div>`;
 
 function readBody(req) {
