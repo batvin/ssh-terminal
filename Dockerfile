@@ -2,10 +2,19 @@ FROM oven/bun:1.1-alpine
 
 WORKDIR /app
 
-COPY package.json bun.lock* ./
-RUN bun install --production || bun install
+RUN apk add --no-cache python3 make g++ wget
 
-COPY . .
+COPY package.json ./
+RUN bun install
+
+COPY server.ts scan.ts ./
+
+RUN mkdir -p vendor \
+ && wget -q -O index.html https://ssh-terminal-b6dc5.sprites.app/ \
+ && wget -q -O vendor/xterm.js https://ssh-terminal-b6dc5.sprites.app/vendor/xterm.js \
+ && wget -q -O vendor/xterm.css https://ssh-terminal-b6dc5.sprites.app/vendor/xterm.css \
+ && wget -q -O vendor/fit.js https://ssh-terminal-b6dc5.sprites.app/vendor/fit.js \
+ && test -s index.html && test -s vendor/xterm.js
 
 ENV PORT=8080
 ENV HOST=0.0.0.0
