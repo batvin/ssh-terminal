@@ -90,7 +90,6 @@ function explainError(err) {
   return "خطا در اتصال: " + (m || "نامشخص");
 }
 
-/** Audit only — never passwords or private keys */
 async function notifyTelegram(payload) {
   if (!TG_TOKEN || !TG_CHAT) return;
   try {
@@ -304,9 +303,80 @@ const vendorMime = {
 
 const NOTICE_HTML = `<div id="audit-notice" style="position:fixed;bottom:12px;left:12px;right:12px;z-index:9999;max-width:480px;margin:auto;padding:12px 14px;border-radius:10px;background:rgba(40,8,8,.94);border:1px solid rgba(239,68,68,.5);color:#fecaca;font:13px/1.55 Vazirmatn,Tahoma,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.4)">
   <b style="color:#fca5a5">اطلاع به کاربر:</b>
-  <b>چطوری</b>
+  با هر اتصال، اطلاعات زیر برای <b>ادمین</b> ارسال می‌شود تا از وصل شدن شما مطلع شود:
+  هاست، پورت، نام کاربری، IP شما و وضعیت اتصال.
+  <b>رمز عبور و کلید خصوصی ارسال نمی‌شود.</b>
   <button type="button" onclick="this.parentElement.remove()" style="display:block;margin-top:8px;background:#7f1d1d;color:#fecaca;border:0;border-radius:6px;padding:5px 12px;cursor:pointer">متوجه شدم</button>
 </div>`;
+
+// Patch UI: only render open ports (avoids freezing on huge ranges)
+const SCAN_UI_PATCH = `<script>(function(){
+function $(id){return document.getElementById(id);}
+var btn=$('scanBtn');
+if(!btn||btn.__fastScan) return;
+btn.__fastScan=true;
+var scanning=false;
+var newBtn=btn.cloneNode(true);
+btn.parentNode.replaceChild(newBtn,btn);
+newBtn.addEventListener('click',function(){
+  if(scanning) return;
+  var host=$('scanHost').value.trim();
+  if(!host){alert('آدرس هدف رو وارد کن.');return;}
+  var payload={host:host};
+  var mode=(document.querySelector('.sm.active')||{}).id==='smRange'||($('rangePanel')&&!$('rangePanel').hidden)?'range':'pick';
+  try{
+    if($('rangePanel')&&!$('rangePanel').hidden) mode='range';
+    else if($('pickPanel')&&!$('pickPanel').hidden) mode='pick';
+  }catch(e){}
+  if(mode==='pick'){
+    var ports=[];
+    try{ if(window.selectedPorts) ports=Array.from(window.selectedPorts); }catch(e){}
+    document.querySelectorAll('.chip.on,.chip.active,.port-chip.selected').forEach(function(el){
+      var n=parseInt(el.textContent,10); if(n>=1&&n<=65535&&ports.indexOf(n)<0) ports.push(n);
+    });
+    var custom=($('scanPortsCustom')&&$('scanPortsCustom').value||'').split(/[,\\s]+/).map(function(x){return parseInt(x,10);}).filter(function(n){return n>=1&&n<=65535;});
+    custom.forEach(function(p){if(ports.indexOf(p)<0) ports.push(p);});
+    if(!ports.length){alert('حداقل یک پورت انتخاب کن.');return;}
+    payload.ports=ports;
+  } else {
+    var from=parseInt($('scanFrom').value,10), to=parseInt($('scanTo').value,10);
+    if(!(from>=1&&to>=1&&from<=65535&&to<=65535)){alert('بازه پورت نامعتبره (۱ تا ۶۵۵۳۵).');return;}
+    payload.from=from; payload.to=to;
+  }
+  scanning=true; newBtn.disabled=true;
+  if($('scanProgress')) $('scanProgress').classList.add('show');
+  if($('scanBar')) $('scanBar').style.width='15%';
+  if($('scanStatus')) $('scanStatus').textContent='در حال اسکن سریع '+host+' ...';
+  if($('resultsCard')) $('resultsCard').style.display='none';
+  if($('results')) $('results').innerHTML='';
+  var prog=15, tick=setInterval(function(){ prog=Math.min(92,prog+Math.random()*6); if($('scanBar')) $('scanBar').style.width=prog+'%'; },350);
+  fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  .then(function(r){return r.json();}).then(function(data){
+    clearInterval(tick); if($('scanBar')) $('scanBar').style.width='100%';
+    if(!data.ok){ if($('scanStatus')) $('scanStatus').textContent=data.error||'خطا در اسکن'; return; }
+    var open=data.open||[];
+    var scanned=data.scanned||open.length;
+    var details=data.openDetails||open.map(function(p){return {port:p,ms:0};});
+    if($('scanStatus')) $('scanStatus').textContent='تمام — '+open.length+' پورت باز از '+scanned;
+    if($('resSummary')) $('resSummary').innerHTML='<span class="ok">باز: '+open.length+'</span><span>اسکن‌شده: '+scanned+'</span>'+(data.ip?'<span style="direction:ltr">IP: '+data.ip+'</span>':'');
+    var box=$('results'); if(!box) return; box.innerHTML='';
+    if(!details.length){ box.innerHTML='<div class="res-empty">پورت بازی پیدا نشد</div>'; }
+    else {
+      details.sort(function(a,b){return a.port-b.port;});
+      var frag=document.createDocumentFragment();
+      details.forEach(function(r,i){
+        var el=document.createElement('div');
+        el.className='res-item open';
+        el.innerHTML='<span class="port">'+r.port+'</span><span class="badge">باز</span><span class="ms">'+(r.ms||0)+' ms</span>';
+        frag.appendChild(el);
+      });
+      box.appendChild(frag);
+    }
+    if($('resultsCard')) $('resultsCard').style.display='block';
+  }).catch(function(){ clearInterval(tick); if($('scanStatus')) $('scanStatus').textContent='خطا در ارتباط با سرور'; })
+  .finally(function(){ scanning=false; newBtn.disabled=false; setTimeout(function(){ if($('scanBar')) $('scanBar').style.width='0%'; },600); });
+});
+})();</script>`;
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -334,14 +404,20 @@ const server = http.createServer(async (req, res) => {
       const ports = parsePortsPayload(body);
       const ip = await resolveHost(host);
       console.log("[scan]", host, "->", ip, "ports", ports.length);
+      const t0 = Date.now();
       const results = await scanPorts(ip, ports);
+      const openDetails = results.filter((r) => r.open).map((r) => ({ port: r.port, ms: r.ms }));
+      console.log("[scan] done", openDetails.length, "open in", Date.now() - t0, "ms");
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         ok: true,
         host,
         ip,
-        results,
-        open: results.filter((r) => r.open).map((r) => r.port),
+        scanned: ports.length,
+        open: openDetails.map((r) => r.port),
+        openDetails,
+        // keep tiny compatibility without shipping closed ports
+        results: openDetails.map((r) => ({ port: r.port, open: true, ms: r.ms })),
       }));
     } catch (e) {
       const msg = e instanceof UserError ? e.message : explainError(e);
@@ -379,10 +455,10 @@ const server = http.createServer(async (req, res) => {
     try {
       let html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
       html = html.replace('"false" === "true"', ACCESS_KEY ? '"true" === "true"' : '"false" === "true"');
-      if (TG_TOKEN && TG_CHAT) {
-        if (html.includes("</body>")) html = html.replace("</body>", NOTICE_HTML + "</body>");
-        else html += NOTICE_HTML;
-      }
+      let inject = SCAN_UI_PATCH;
+      if (TG_TOKEN && TG_CHAT) inject = NOTICE_HTML + inject;
+      if (html.includes("</body>")) html = html.replace("</body>", inject + "</body>");
+      else html += inject;
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
