@@ -1,8 +1,10 @@
-FROM oven/bun:1.1-alpine
+FROM oven/bun:1.1
 
 WORKDIR /app
 
-RUN apk add --no-cache python3 make g++ wget
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ wget ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
 RUN bun install
