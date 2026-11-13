@@ -2,9 +2,10 @@
   "name": "ssh-terminal",
   "type": "module",
   "scripts": {
-    "start": "bun run server.ts"
+    "start": "node server.mjs"
   },
   "dependencies": {
-    "ssh2": "^1.17.0"
+    "ssh2": "^1.17.0",
+    "ws": "^8.18.0"
   }
 }
