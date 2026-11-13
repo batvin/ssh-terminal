@@ -1,10 +1,13 @@
-FROM oven/bun:1.1
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ wget ca-certificates \
  && rm -rf /var/lib/apt/lists/*
+
+# Install Bun for running the TypeScript server
+RUN npm install -g bun
 
 COPY package.json ./
 RUN bun install
