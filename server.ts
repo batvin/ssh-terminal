@@ -70,7 +70,7 @@ function explainError(err: any): string {
     return "ورود ناموفق بود: نام کاربری، رمز عبور یا کلید اشتباه است.";
   if (/privateKey|passphrase|Unsupported key|key format|Cannot parse/i.test(m))
     return "کلید خصوصی نامعتبره یا رمز کلید (passphrase) اشتباهه.";
-  if (/operation is not supported/i.test(m))
+  if (/operation is not supported|Unsupported algorithm/i.test(m))
     return "الگوریتم رمزنگاری SSH پشتیبانی نشد؛ سرور مقصد الگوریتم ناسازگار دارد.";
   if (c === "ECONNREFUSED") return "سرور اتصال رو رد کرد؛ پورت اشتباهه یا سرویس SSH روشن نیست.";
   if (c === "ENOTFOUND" || c === "EAI_AGAIN") return "آدرس سرور پیدا نشد؛ Host رو دوباره چک کن.";
@@ -126,6 +126,7 @@ function parsePortsPayload(body: any): number[] {
 
 let sessions = 0;
 
+// Safe algorithms for Bun crypto (no curve25519 / ed25519)
 const SSH_ALGORITHMS = {
   kex: [
     "ecdh-sha2-nistp256",
@@ -134,8 +135,6 @@ const SSH_ALGORITHMS = {
     "diffie-hellman-group14-sha256",
     "diffie-hellman-group14-sha1",
     "diffie-hellman-group-exchange-sha256",
-    "curve25519-sha256",
-    "zara.a@example.net",
   ],
   cipher: [
     "aes128-ctr",
@@ -147,7 +146,6 @@ const SSH_ALGORITHMS = {
     "uma.s@example.org",
   ],
   serverHostKey: [
-    "ssh-ed25519",
     "ecdsa-sha2-nistp256",
     "ecdsa-sha2-nistp384",
     "ecdsa-sha2-nistp521",
