@@ -19,9 +19,10 @@ function probe(ip, port, timeout) {
   });
 }
 
-export async function scanPorts(ip, ports, timeout = 1200, concurrency = 600) {
+export async function scanPorts(ip, ports, timeout = 280, concurrency = 900) {
   const results = new Array(ports.length);
   let next = 0;
+  const workers = Math.min(concurrency, ports.length);
   async function worker() {
     while (true) {
       const i = next++;
@@ -29,6 +30,6 @@ export async function scanPorts(ip, ports, timeout = 1200, concurrency = 600) {
       results[i] = await probe(ip, ports[i], timeout);
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, ports.length) }, worker));
+  await Promise.all(Array.from({ length: workers }, worker));
   return results;
 }
