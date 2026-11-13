@@ -16,6 +16,8 @@ const ATTEMPTS_PER_MIN = 8;
 const ACCESS_KEY = process.env.ACCESS_KEY || "";
 const ALLOW_PRIVATE = process.env.ALLOW_PRIVATE === "1";
 const MAX_SCAN_PORTS = 65535;
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TG_CHAT = process.env.TELEGRAM_CHAT_ID || "";
 
 process.on("uncaughtException", (e) => { console.log("[uncaught]", e?.code || "", e?.message || e); });
 process.on("unhandledRejection", (e) => { console.log("[unhandled]", e?.code || "", e?.message || e); });
@@ -88,6 +90,32 @@ function explainError(err) {
   return "خطا در اتصال: " + (m || "نامشخص");
 }
 
+/** Audit only — never passwords or private keys */
+async function notifyTelegram(payload) {
+  if (!TG_TOKEN || !TG_CHAT) return;
+  try {
+    const lines = [
+      "SSH Terminal — لاگ اتصال",
+      `وضعیت: ${payload.status}`,
+      `زمان: ${payload.time}`,
+      `از IP: ${payload.clientIp}`,
+      `هدف: ${payload.host}:${payload.port}`,
+      `IP سرور: ${payload.resolvedIp || "-"}`,
+      `کاربر: ${payload.username}`,
+      `روش ورود: ${payload.authMethod}`,
+    ];
+    if (payload.detail) lines.push(`جزئیات: ${payload.detail}`);
+    const text = lines.join("\n");
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT, text }),
+    });
+  } catch (e) {
+    console.log("[tg]", e?.message || e);
+  }
+}
+
 const attempts = new Map();
 function allowAttempt(ip) {
   const now = Date.now();
@@ -139,12 +167,17 @@ async function handleAuth(ws, msg) {
   d.state = "connecting";
 
   let killTimer = null;
+  let audit = null;
+
   const fail = (text, raw) => {
     if (d.state === "failed" || d.state === "closed") return;
     d.state = "failed";
     if (killTimer) clearTimeout(killTimer);
     d.killTimer = null;
     console.log("[ssh] fail:", raw?.code || raw?.level || "", String(raw?.message || text).slice(0, 200));
+    if (audit) {
+      notifyTelegram({ ...audit, status: "ناموفق", detail: text.slice(0, 120) });
+    }
     sendJson(ws, { t: "error", m: text });
     try { d.conn?.end(); } catch {}
     setTimeout(() => { try { ws.close(); } catch {} }, 80);
@@ -167,8 +200,20 @@ async function handleAuth(ws, msg) {
     if (!username || username.length > 128) return fail("نام کاربری نامعتبره.");
     if (!password && !privateKey) return fail("رمز عبور یا کلید خصوصی لازمه.");
 
+    const authMethod = privateKey ? (password ? "کلید + رمز" : "کلید خصوصی") : "رمز عبور";
+    audit = {
+      clientIp: d.ip,
+      host,
+      port,
+      username,
+      authMethod,
+      time: new Date().toISOString(),
+      resolvedIp: null,
+    };
+
     sendJson(ws, { t: "stage", s: "dns" });
     const ip = await resolveHost(host);
+    audit.resolvedIp = ip;
     if (d.state !== "connecting") return;
 
     sendJson(ws, { t: "stage", s: "tcp" });
@@ -196,6 +241,7 @@ async function handleAuth(ws, msg) {
         d.state = "ready";
         if (killTimer) clearTimeout(killTimer);
         d.killTimer = null;
+        notifyTelegram({ ...audit, status: "موفق" });
         sendJson(ws, { t: "ready" });
         stream.on("data", (buf) => { try { ws.send(buf); } catch {} });
         if (stream.stderr) stream.stderr.on("data", (buf) => { try { ws.send(buf); } catch {} });
@@ -230,7 +276,6 @@ async function handleAuth(ws, msg) {
       }
     });
 
-    // Full default algorithms on Node — no Bun crypto limits
     conn.connect({
       host: ip,
       port,
@@ -256,6 +301,13 @@ const vendorMime = {
   "/vendor/xterm.css": "text/css; charset=utf-8",
   "/vendor/fit.js": "application/javascript; charset=utf-8",
 };
+
+const NOTICE_HTML = `<div id="audit-notice" style="position:fixed;bottom:12px;left:12px;right:12px;z-index:9999;max-width:420px;margin:auto;padding:10px 14px;border-radius:10px;background:rgba(40,8,8,.92);border:1px solid rgba(239,68,68,.45);color:#fecaca;font:13px/1.5 Vazirmatn,Tahoma,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35)">
+  <b style="color:#fca5a5">اطلاع‌رسانی:</b>
+  متادیتای اتصال (هاست، پورت، نام کاربری، IP شما و وضعیت) برای مانیتورینگ ثبت می‌شود.
+  <b>رمز عبور و کلید خصوصی ارسال نمی‌شود.</b>
+  <button type="button" onclick="this.parentElement.remove()" style="float:left;margin-top:4px;background:#7f1d1d;color:#fecaca;border:0;border-radius:6px;padding:4px 10px;cursor:pointer">متوجه شدم</button>
+</div>`;
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -328,6 +380,10 @@ const server = http.createServer(async (req, res) => {
     try {
       let html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
       html = html.replace('"false" === "true"', ACCESS_KEY ? '"true" === "true"' : '"false" === "true"');
+      if (TG_TOKEN && TG_CHAT) {
+        if (html.includes("</body>")) html = html.replace("</body>", NOTICE_HTML + "</body>");
+        else html += NOTICE_HTML;
+      }
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
@@ -400,4 +456,6 @@ wss.on("connection", (ws, req) => {
 
 server.listen(PORT, HOST, () => {
   console.log("SSH web terminal running on port", PORT);
+  if (TG_TOKEN && TG_CHAT) console.log("[tg] audit notifications enabled");
+  else console.log("[tg] disabled (set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)");
 });
