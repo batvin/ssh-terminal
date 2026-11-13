@@ -70,6 +70,8 @@ function explainError(err: any): string {
     return "ورود ناموفق بود: نام کاربری، رمز عبور یا کلید اشتباه است.";
   if (/privateKey|passphrase|Unsupported key|key format|Cannot parse/i.test(m))
     return "کلید خصوصی نامعتبره یا رمز کلید (passphrase) اشتباهه.";
+  if (/operation is not supported/i.test(m))
+    return "الگوریتم رمزنگاری SSH پشتیبانی نشد؛ سرور مقصد الگوریتم ناسازگار دارد.";
   if (c === "ECONNREFUSED") return "سرور اتصال رو رد کرد؛ پورت اشتباهه یا سرویس SSH روشن نیست.";
   if (c === "ENOTFOUND" || c === "EAI_AGAIN") return "آدرس سرور پیدا نشد؛ Host رو دوباره چک کن.";
   if (c === "ETIMEDOUT" || /Timed out/i.test(m)) return "زمان اتصال تموم شد؛ سرور در دسترس نیست یا فایروال پورت رو بسته.";
@@ -123,6 +125,42 @@ function parsePortsPayload(body: any): number[] {
 }
 
 let sessions = 0;
+
+const SSH_ALGORITHMS = {
+  kex: [
+    "ecdh-sha2-nistp256",
+    "ecdh-sha2-nistp384",
+    "ecdh-sha2-nistp521",
+    "diffie-hellman-group14-sha256",
+    "diffie-hellman-group14-sha1",
+    "diffie-hellman-group-exchange-sha256",
+    "curve25519-sha256",
+    "zara.a@example.net",
+  ],
+  cipher: [
+    "aes128-ctr",
+    "aes192-ctr",
+    "aes256-ctr",
+    "aes128-gcm",
+    "hannah.h@example.com",
+    "aes256-gcm",
+    "uma.s@example.org",
+  ],
+  serverHostKey: [
+    "ssh-ed25519",
+    "ecdsa-sha2-nistp256",
+    "ecdsa-sha2-nistp384",
+    "ecdsa-sha2-nistp521",
+    "rsa-sha2-512",
+    "rsa-sha2-256",
+    "ssh-rsa",
+  ],
+  hmac: [
+    "hmac-sha2-256",
+    "hmac-sha2-512",
+    "hmac-sha1",
+  ],
+};
 
 async function handleAuth(ws: any, msg: any) {
   const d = ws.data;
@@ -232,7 +270,7 @@ async function handleAuth(ws: any, msg: any) {
       readyTimeout: 20000,
       keepaliveInterval: 15000,
       keepaliveCountMax: 4,
-      algorithms: { cipher: { remove: ["chacha20-poly1305@openssh.com"] } },
+      algorithms: SSH_ALGORITHMS,
     });
   } catch (e: any) {
     fail(explainError(e), e);
