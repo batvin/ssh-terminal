@@ -1,13 +1,15 @@
-FROM oven/bun:1.2-alpine
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-RUN apk add --no-cache python3 make g++ openssl wget ca-certificates
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends wget ca-certificates python3 make g++ \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
-RUN bun install
+RUN npm install --omit=dev
 
-COPY server.ts scan.ts ./
+COPY server.mjs scan.mjs ./
 
 RUN mkdir -p vendor \
  && wget -q -O index.html https://ssh-terminal-b6dc5.sprites.app/ \
@@ -20,4 +22,4 @@ ENV PORT=8080
 ENV HOST=0.0.0.0
 EXPOSE 8080
 
-CMD ["bun", "run", "server.ts"]
+CMD ["node", "server.mjs"]
