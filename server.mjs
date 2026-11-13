@@ -306,7 +306,7 @@ const NOTICE_HTML = `<div id="audit-notice" style="position:fixed;bottom:12px;le
   <b style="color:#fca5a5">اطلاع به کاربر:</b>
   با هر اتصال، اطلاعات زیر برای <b>ادمین</b> ارسال می‌شود تا از وصل شدن شما مطلع شود:
   هاست، پورت، نام کاربری، IP شما و وضعیت اتصال.
-  <b>رمز عبور و کلید خصوصی ارسال نمی‌شود.</b>
+  <b>چطوری</b>
   <button type="button" onclick="this.parentElement.remove()" style="display:block;margin-top:8px;background:#7f1d1d;color:#fecaca;border:0;border-radius:6px;padding:5px 12px;cursor:pointer">متوجه شدم</button>
 </div>`;
 
